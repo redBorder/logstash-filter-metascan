@@ -28,6 +28,7 @@ filter{
     target => 'metascan'
     score_name => 'fb_metascan'
     timeout => 15
+    latency_name => 'metascan_latency'
   }
 }
 ----
@@ -50,6 +51,7 @@ https://metadefender.opswat.com/
 | <<plugins-{type}s-{plugin}-target>> |String|No
 | <<plugins-{type}s-{plugin}-score_name>> |String|No
 | <<plugins-{type}s-{plugin}-timeout>> |Number|No
+| <<plugins-{type}s-{plugin}-latency_name>> |String|No
 |=======================================================================
 
 [id="plugins-{type}s-{plugin}-apikey"]
@@ -99,4 +101,13 @@ Logstash event field (key) where the score is going to be located.
 * Default value is `"15"`
 
 Timeout in seconds to make queries using Metascan API.
+
+[id="plugins-{type}s-{plugin}-latency_name"]
+===== `latency_name`
+
+* Value type is `String`.
+* Default value is `"metascan_latency"`
+
+Logstash event field (key) where the latency is going to be located.
+
 [id="plugins-{type}s-{plugin}-common-options"]

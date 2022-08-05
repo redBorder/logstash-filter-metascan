@@ -23,6 +23,8 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
   config :target, :validate => :string, :default => "metascan"
   # Where you want the score to be placed
   config :score_name, :validate => :string, :default => "fb_metascan"
+  # Where you want the latency to be placed
+  config :latency_name, :validate => :string, :default => "metascan_latency"
 
 
   public
@@ -130,7 +132,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     ending_time  = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     elapsed_time = (ending_time - starting_time).round(1)
 
-    event.set("metascan_latency", elapsed_time)
+    event.set(@latency_name, elapsed_time)
     event.set(@target, metascan_result)
     event.set(@score_name, score)
     # filter_matched should go in the last line of our successful code
