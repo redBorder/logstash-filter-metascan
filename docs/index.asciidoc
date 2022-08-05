@@ -27,6 +27,7 @@ filter{
     weight => 1.0
     target => 'metascan'
     score_name => 'fb_metascan'
+    timeout => 15
   }
 }
 ----
@@ -48,6 +49,7 @@ https://metadefender.opswat.com/
 | <<plugins-{type}s-{plugin}-weight>> |Float|No
 | <<plugins-{type}s-{plugin}-target>> |String|No
 | <<plugins-{type}s-{plugin}-score_name>> |String|No
+| <<plugins-{type}s-{plugin}-timeout>> |Number|No
 |=======================================================================
 
 [id="plugins-{type}s-{plugin}-apikey"]
@@ -90,4 +92,11 @@ Logstash event field (key) where the JSON is going to be located.
 
 Logstash event field (key) where the score is going to be located.
 
+[id="plugins-{type}s-{plugin}-timeout"]
+===== `timeout`
+
+* Value type is `Number`.
+* Default value is `"15"`
+
+Timeout in seconds to make queries using Metascan API.
 [id="plugins-{type}s-{plugin}-common-options"]
