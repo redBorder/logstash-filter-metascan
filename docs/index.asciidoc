@@ -35,7 +35,7 @@ filter{
 
 === Description
 
-This is an example of Logstash filter plugin for Metascan (aka Metadefender). This filter returns a JSON with the result provided by Metascan and a
+This is an example of Logstash filter plugin for Metascan (aka Metadefender). This filter returns a JSON with the result provided by Metascan and a score about how potentially dangerous is the file.
 
 https://metadefender.opswat.com/
 
