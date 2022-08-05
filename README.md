@@ -24,7 +24,7 @@ Need help? Try sending us an email to support@redborder.com
 rvm install jruby-9.2.6.0
 ```
 
-- Clone from the GitHub [logstash-filter-scores](https://github.com/redBorder/logstash-filter-scores)
+- Clone from the GitHub [logstash-filter-metascan](https://github.com/redBorder/logstash-filter-metascan)
 
 - Install dependencies
 ```sh
