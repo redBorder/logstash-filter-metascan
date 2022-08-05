@@ -22,7 +22,7 @@ END - GENERATED VARIABLES, DO NOT EDIT!
 ----
 filter{
   metascan {
-    apikey => 'fdb00f2216579cc185af20ee999d2c71'
+    apikey => 'apikey'
     file_path => '[path]'
     weight => 1.0
     target => 'metascan'
