@@ -23,7 +23,7 @@ END - GENERATED VARIABLES, DO NOT EDIT!
 filter{
   metascan {
     apikey => 'apikey'
-    file_path => '[path]'
+    file_field => '[path]'
     weight => 1.0
     target => 'metascan'
     score_name => 'fb_metascan'
@@ -44,7 +44,7 @@ https://metadefender.opswat.com/
 |=======================================================================
 |Setting |Input type|Required
 | <<plugins-{type}s-{plugin}-apikey>> |String|Yes
-| <<plugins-{type}s-{plugin}-file_field>> |String|Yes
+| <<plugins-{type}s-{plugin}-file_field>> |String|No
 | <<plugins-{type}s-{plugin}-weight>> |Float|No
 | <<plugins-{type}s-{plugin}-target>> |String|No
 | <<plugins-{type}s-{plugin}-score_name>> |String|No
@@ -62,7 +62,7 @@ Get your apikey: https://metadefender.opswat.com/account
 ===== `file_field`
 
 * Value type is `String`.
-* Default value is `""`
+* Default value is `"[path]"`
 
 Logstash event field (key) where the file to be analyzed is located.
 

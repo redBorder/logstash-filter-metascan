@@ -14,7 +14,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
   # Metascan apikey. Please visit https://metadefender.opswat.com/account to get your apikey.
   config :apikey,      :validate => :string,  :default => "",  :required => true
   # File that is going to be analyzed
-  config :file_field,   :validate => :string,  :default => "",  :required => true
+  config :file_field,   :validate => :string,  :default => "[path]"
   # Timeout waiting for response
   config :timeout, :validate => :number, :default => 15
   # Loader weight
