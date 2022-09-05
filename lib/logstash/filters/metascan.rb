@@ -5,26 +5,38 @@ require "logstash/namespace"
 require 'json'
 require 'faraday'
 require 'digest'
+require 'aerospike'
 
+require_relative "util/aerospike_config"
+require_relative "util/aerospike_methods"
 
 class LogStash::Filters::Metascan < LogStash::Filters::Base
+
+  include Aerospike
 
   config_name "metascan"
 
   # Metascan apikey. Please visit https://metadefender.opswat.com/account to get your apikey.
-  config :apikey,      :validate => :string,  :default => "",  :required => true
+  config :apikey,                           :validate => :string,           :default => "",       :required => true
   # File that is going to be analyzed
-  config :file_field,   :validate => :string,  :default => "[path]"
+  config :file_field,                       :validate => :string,           :default => "[path]"
   # Timeout waiting for response
-  config :timeout, :validate => :number, :default => 15
+  config :timeout,                          :validate => :number,           :default => 15
   # Loader weight
-  config :weight, :default => 1.0
+  config :weight,                                                           :default => 1.0
   # Where you want the data to be placed
-  config :target, :validate => :string, :default => "metascan"
+  config :target,                           :validate => :string,           :default => "metascan"
   # Where you want the score to be placed
-  config :score_name, :validate => :string, :default => "fb_metascan"
+  config :score_name,                       :validate => :string,           :default => "fb_metascan"
   # Where you want the latency to be placed
-  config :latency_name, :validate => :string, :default => "metascan_latency"
+  config :latency_name,                     :validate => :string,           :default => "metascan_latency"
+  #Aerospike server in the form "host:port"
+  config :aerospike_server,                 :validate => :string,           :default => ""
+  #Namespace is a Database name in Aerospike
+  config :aerospike_namespace,              :validate => :string,           :default => "malware"
+  #Set in Aerospike is similar to table in a relational database.
+  # Where are scores stored
+  config :aerospike_set,                    :validate => :string,           :default => "hashScores"
 
 
   public
@@ -32,6 +44,17 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     # Add instance variables
     @url_hash = "https://api.metadefender.com/v4/hash/"
     @url_file = "https://api.metadefender.com/v4/file"
+
+    begin
+      @aerospike_server = AerospikeConfig::servers if @aerospike_server.empty?
+      @aerospike_server = @aerospike_server[0] if @aerospike_server.class.to_s == "Array"
+      host,port = @aerospike_server.split(":")
+      @aerospike = Client.new(Host.new(host, port))
+
+    rescue Aerospike::Exceptions::Aerospike => ex
+      @logger.error(ex.message)
+    end
+
   end # def register
 
   private
@@ -40,6 +63,8 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     response_code = response.status
 
     case response_code
+      when 200
+        response_message = ""
       when 400
         response_message = "CODE 400 Bad Request - Unsupported HTTP method or invalid HTTP request (e.g., empty body)"
       when 401
@@ -48,10 +73,12 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
         response_message = "CODE 403 Signature lookup limit reached, try again later - The hourly hash lookup limit has been reached for this API key."
       when 404
         response_message = "CODE 404 The requested page was not found. Try to upload the file."
+      when 429
+        response_message = "CODE 429 Rate limit exceeded, retry after the limit is reset."
       when 503
         response_message = "CODE 503 Internal Server Error - Server temporarily unavailable. Try again later."
-      else #when 200
-      response_message = ""
+      else
+        response_message = "Unexpected error"
     end
 
     [response_code,response_message]
@@ -72,7 +99,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
       response_code,response_message = check_response(response)
       if response_code != 200
         @logger.error(response_message)
-        return [score,result]
+        return [result, score]
       end
 
       result = JSON.parse(response.body)
@@ -86,7 +113,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
       @logger.error("Timeout trying to contact Metascan")
 
     rescue Faraday::ConnectionFailed => ex
-      puts ex.message
+      @logger.error(ex.message)
     end
     [result, score]
   end
@@ -106,7 +133,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
       response_code,response_message = check_response(response)
       if response_code != 200
         @logger.error(response_message)
-        return [score,result]
+        return [result, score]
       end
 
       data_id = JSON.parse(response.body)["data_id"]
@@ -135,7 +162,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
         response_code,response_message = check_response(response)
         if response_code != 200
           @logger.error(response_message)
-          return [score,result]
+          return [result, score]
         end
 
         result = JSON.parse(response.body)
@@ -145,7 +172,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     rescue Faraday::TimeoutError
       @logger.error("Timeout trying to contact Metascan")
     rescue Faraday::ConnectionFailed => ex
-      puts ex.message
+      @logger.error(ex.message)
     end
 
     total_avs = result["scan_results"]["total_avs"].to_f
@@ -162,7 +189,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
 
     @path = event.get(@file_field)
     begin
-      @hash = Digest::MD5.hexdigest File.read @path
+      @hash = Digest::SHA2.new(256).hexdigest File.read @path
     rescue Errno::ENOENT => ex
       @logger.error(ex.message)
     end
@@ -183,6 +210,8 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     event.set(@latency_name, elapsed_time)
     event.set(@target, metascan_result)
     event.set(@score_name, score)
+
+    AerospikeMethods::update_malware_hash_score(@aerospike, @aerospike_namespace, @aerospike_set, @hash, @score_name, score, "fb")
     # filter_matched should go in the last line of our successful code
     filter_matched(event)
 
