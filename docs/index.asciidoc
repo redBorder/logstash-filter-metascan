@@ -24,7 +24,6 @@ filter{
   metascan {
     apikey => 'apikey'
     file_field => '[path]'
-    weight => 1.0
     target => 'metascan'
     score_name => 'fb_metascan'
     timeout => 15
