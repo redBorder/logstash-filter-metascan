@@ -209,7 +209,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     event.set(@target, metascan_result)
     event.set(@score_name, score)
 
-    AerospikeMethods::update_malware_hash_score(@aerospike, @aerospike_namespace, @aerospike_set, @hash, @score_name, score, "fb")
+    AerospikeManager::update_malware_hash_score(@aerospike, @aerospike_namespace, @aerospike_set, @hash, @score_name, score, "fb")
     # filter_matched should go in the last line of our successful code
     filter_matched(event)
 
