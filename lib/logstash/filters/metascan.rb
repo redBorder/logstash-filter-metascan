@@ -8,7 +8,7 @@ require 'digest'
 require 'aerospike'
 
 require_relative "util/aerospike_config"
-require_relative "util/aerospike_methods"
+require_relative "util/aerospike_manager"
 
 class LogStash::Filters::Metascan < LogStash::Filters::Base
 
@@ -22,8 +22,6 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
   config :file_field,                       :validate => :string,           :default => "[path]"
   # Timeout waiting for response
   config :timeout,                          :validate => :number,           :default => 15
-  # Loader weight
-  config :weight,                                                           :default => 1.0
   # Where you want the data to be placed
   config :target,                           :validate => :string,           :default => "metascan"
   # Where you want the score to be placed
@@ -106,7 +104,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
       unless result["error"]
         total_avs = result["scan_results"]["total_avs"].to_f
         total_detected_avs = result["scan_results"]["total_detected_avs"].to_f
-        score = ( (total_detected_avs / total_avs * 100) * @weight ).round
+        score = ( total_detected_avs / total_avs * 100 ).round
       end
 
     rescue Faraday::TimeoutError
@@ -178,7 +176,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     total_avs = result["scan_results"]["total_avs"].to_f
     total_detected_avs = result["scan_results"]["total_detected_avs"].to_f
 
-    score = ( (total_detected_avs / total_avs * 100) * @weight ).round
+    score = ( total_detected_avs / total_avs * 100 ).round
 
     [result, score]
   end
