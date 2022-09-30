@@ -9,6 +9,7 @@ require 'aerospike'
 
 require_relative "util/aerospike_config"
 require_relative "util/aerospike_manager"
+require_relative "util/s3_manager"
 
 class LogStash::Filters::Metascan < LogStash::Filters::Base
 
@@ -28,13 +29,29 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
   config :score_name,                       :validate => :string,           :default => "fb_metascan"
   # Where you want the latency to be placed
   config :latency_name,                     :validate => :string,           :default => "metascan_latency"
-  #Aerospike server in the form "host:port"
+  # Aerospike server in the form "host:port"
   config :aerospike_server,                 :validate => :string,           :default => ""
-  #Namespace is a Database name in Aerospike
+  # Namespace is a Database name in Aerospike
   config :aerospike_namespace,              :validate => :string,           :default => "malware"
-  #Set in Aerospike is similar to table in a relational database.
+  # Set in Aerospike is similar to table in a relational database.
   # Where are scores stored
   config :aerospike_set,                    :validate => :string,           :default => "hashScores"
+  # Where you want to store the results in s3
+  config :s3_path,                          :validate => :string,           :default => "/mdata/resultData/realTime/"
+  # S3 bucket
+  config :bucket,                           :validate => :string,           :default => "malware"
+  # S3 Endpoint
+  config :endpoint,                         :validate => :string,           :default => "s3.redborder.cluster"
+  # S3 Access key
+  config :access_key_id,                    :validate => :string,           :default => ""
+  # S3 Secret Access key
+  config :secret_access_key,                :validate => :string,           :default => ""
+  # S3 force_path_style option
+  config :force_path_style,                 :validate => :boolean,          :default => true
+  # S3 ssl_verify_peer option
+  config :ssl_verify_peer,                  :validate => :boolean,          :default => false
+  # Certificate path
+  config :ssl_ca_bundle,                    :validate => :string,           :default => "/var/opt/opscode/nginx/ca/s3.redborder.cluster.crt"
 
 
   public
@@ -186,6 +203,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
   def filter(event)
 
     @path = event.get(@file_field)
+    @timestamp = event.get('@timestamp')
     begin
       @hash = Digest::SHA2.new(256).hexdigest File.read @path
     rescue Errno::ENOENT => ex
@@ -197,7 +215,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     metascan_result,score = get_response_from_hash
 
     # The hash was not found. Error code 404003
-    if metascan_result["error"]
+    if metascan_result.empty?
       data_id = send_file
       metascan_result,score = get_response_from_data_id(data_id)
     end
@@ -210,6 +228,12 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     event.set(@score_name, score)
 
     AerospikeManager::update_malware_hash_score(@aerospike, @aerospike_namespace, @aerospike_set, @hash, @score_name, score, "fb")
+
+    if !@access_key_id.empty? and !@secret_access_key.empty?
+      S3Manager::update_results_file_s3(metascan_result, File.basename(@path), @timestamp,
+                                        @target, @s3_path, @bucket, @endpoint, @access_key_id,
+                                        @secret_access_key, @force_path_style, @ssl_verify_peer, @ssl_ca_bundle)
+    end
     # filter_matched should go in the last line of our successful code
     filter_matched(event)
 
