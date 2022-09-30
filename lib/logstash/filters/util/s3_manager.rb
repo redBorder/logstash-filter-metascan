@@ -45,7 +45,7 @@ module S3Manager
 
     # Writing temporary file
     File.open(temporary_file_path, 'w',) do |f|
-      File.chmod(0777,'/tmp/' + uuid)
+      File.chmod(0777,temporary_file_path)
       FileUtils.chown 'logstash', 'logstash', temporary_file_path
       f.puts results
     end
