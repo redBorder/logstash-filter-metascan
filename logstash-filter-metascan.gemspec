@@ -23,5 +23,7 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency 'digest',                    "3.1.0"
   s.add_runtime_dependency 'json',                      "1.8.6"
   s.add_runtime_dependency 'aerospike',                 "2.5.1"
+  s.add_runtime_dependency 'aws-sdk',                   "1.61.0"
+  #s.add_runtime_dependency 'aws-sdk',                   "~> 2"
   s.add_development_dependency 'logstash-devutils',     "2.4.0"
 end
