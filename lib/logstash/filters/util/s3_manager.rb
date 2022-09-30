@@ -4,8 +4,8 @@ module S3Manager
 
   def self.update_results_file_s3(json,uuid,timestamp, loader, s3_path, bucket,
                                   endpoint, access_key_id,secret_access_key,
-                                  force_path_style,ssl_verify_peer,ssl_ca_bundle)
-
+                                  force_path_style,ssl_verify_peer,ssl_ca_bundle, logger)
+    @logger = logger
     s3 = AWS::S3::Client.new(
       endpoint: endpoint,
       access_key_id: access_key_id,

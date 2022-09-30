@@ -201,8 +201,8 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
 
   public
   def filter(event)
-
     @path = event.get(@file_field)
+    @logger.info "[metscan] processing #{@path}"
     @timestamp = event.get('@timestamp')
     begin
       @hash = Digest::SHA2.new(256).hexdigest File.read @path
@@ -232,7 +232,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     if !@access_key_id.empty? and !@secret_access_key.empty?
       S3Manager::update_results_file_s3(metascan_result, File.basename(@path), @timestamp,
                                         @target, @s3_path, @bucket, @endpoint, @access_key_id,
-                                        @secret_access_key, @force_path_style, @ssl_verify_peer, @ssl_ca_bundle)
+                                        @secret_access_key, @force_path_style, @ssl_verify_peer, @ssl_ca_bundle, @logger)
     end
     # filter_matched should go in the last line of our successful code
     filter_matched(event)
