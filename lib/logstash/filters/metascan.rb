@@ -5,20 +5,13 @@ require "logstash/namespace"
 require 'json'
 require 'faraday'
 require 'digest'
-require 'aerospike'
-
-require_relative "util/aerospike_config"
-require_relative "util/aerospike_manager"
-require_relative "util/s3_manager"
 
 class LogStash::Filters::Metascan < LogStash::Filters::Base
-
-  include Aerospike
 
   config_name "metascan"
 
   # Metascan apikey. Please visit https://metadefender.opswat.com/account to get your apikey.
-  config :apikey,                           :validate => :string,           :default => "",       :required => true
+  config :apikey,                           :validate => :string,           :required => true
   # File that is going to be analyzed
   config :file_field,                       :validate => :string,           :default => "[path]"
   # Timeout waiting for response
@@ -29,29 +22,6 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
   config :score_name,                       :validate => :string,           :default => "fb_metascan"
   # Where you want the latency to be placed
   config :latency_name,                     :validate => :string,           :default => "metascan_latency"
-  # Aerospike server in the form "host:port"
-  config :aerospike_server,                 :validate => :string,           :default => ""
-  # Namespace is a Database name in Aerospike
-  config :aerospike_namespace,              :validate => :string,           :default => "malware"
-  # Set in Aerospike is similar to table in a relational database.
-  # Where are scores stored
-  config :aerospike_set,                    :validate => :string,           :default => "hashScores"
-  # Where you want to store the results in s3
-  config :s3_path,                          :validate => :string,           :default => "/mdata/resultData/realTime/"
-  # S3 bucket
-  config :bucket,                           :validate => :string,           :default => "malware"
-  # S3 Endpoint
-  config :endpoint,                         :validate => :string,           :default => "s3.redborder.cluster"
-  # S3 Access key
-  config :access_key_id,                    :validate => :string,           :default => ""
-  # S3 Secret Access key
-  config :secret_access_key,                :validate => :string,           :default => ""
-  # S3 force_path_style option
-  config :force_path_style,                 :validate => :boolean,          :default => true
-  # S3 ssl_verify_peer option
-  config :ssl_verify_peer,                  :validate => :boolean,          :default => false
-  # Certificate path
-  config :ssl_ca_bundle,                    :validate => :string,           :default => "/var/opt/opscode/nginx/ca/s3.redborder.cluster.crt"
 
 
   public
@@ -60,20 +30,14 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     @url_hash = "https://api.metadefender.com/v4/hash/"
     @url_file = "https://api.metadefender.com/v4/file"
 
-    begin
-      @aerospike_server = AerospikeConfig::servers if @aerospike_server.empty?
-      @aerospike_server = @aerospike_server[0] if @aerospike_server.class.to_s == "Array"
-      host,port = @aerospike_server.split(":")
-      @aerospike = Client.new(Host.new(host, port))
-
-    rescue Aerospike::Exceptions::Aerospike => ex
-      @logger.error(ex.message)
-    end
-
   end # def register
 
   private
 
+  # Get response code and message from a Faraday::Response object to Metascan.
+  #
+  # @param response - Faraday::Response
+  # @return [Array] - Array with [response_code, response_message]
   def check_response(response)
     response_code = response.status
 
@@ -99,7 +63,11 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     [response_code,response_message]
   end
 
+  # Get analysis from hash
+  #
+  # @return [Array] An array with the analysis and the malware score
   def get_response_from_hash
+    @logger.info("Getting response from hash #{@hash}.")
     connection = Faraday.new @url_hash
     score = -1
     result = {}
@@ -133,7 +101,11 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     [result, score]
   end
 
+  # Send the file to be analyzed
+  #
+  # @return [String,nil] - String with the data id to check the analysis progress.
   def send_file
+    @logger.info("Sending file to be analyzed.")
     connection = Faraday.new @url_file
     data_id = nil
     begin
@@ -148,7 +120,7 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
       response_code,response_message = check_response(response)
       if response_code != 200
         @logger.error(response_message)
-        return [result, score]
+        return data_id
       end
 
       data_id = JSON.parse(response.body)["data_id"]
@@ -159,14 +131,19 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     data_id
   end
 
+  # Get analysis from analysis id
+  #
+  # @return [Array] An array with the analysis and the malware score
   def get_response_from_data_id(data_id)
+    @logger.info("Getting response from data id #{data_id}.")
     connection = Faraday.new @url_file + "/"
     progress_percentage = 0
     score = -1
     result = {}
     begin
-
-      while progress_percentage < 100
+      max_number_petitions = 100
+      petitions = 0
+      while progress_percentage < 100 and petitions < max_number_petitions
         response = connection.get data_id do |req|
           req.headers[:apikey] = @apikey
           req.headers["x-file-metadata"] = "1"
@@ -176,13 +153,18 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
 
         response_code,response_message = check_response(response)
         if response_code != 200
-          @logger.error(response_message)
+          @logger.info(response_message)
           return [result, score]
         end
 
         result = JSON.parse(response.body)
         progress_percentage = result["scan_results"]["progress_percentage"]
+
+        petitions += 1
+        sleep 10
       end
+
+      @logger.error("Achieved maximum number of petitions") if petitions == max_number_petitions
 
     rescue Faraday::TimeoutError
       @logger.error("Timeout trying to contact Metascan")
@@ -202,14 +184,18 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
   public
   def filter(event)
     @path = event.get(@file_field)
-    @logger.info "[metscan] processing #{@path}"
-    @timestamp = event.get('@timestamp')
-    begin
-      @hash = Digest::SHA2.new(256).hexdigest File.read @path
-    rescue Errno::ENOENT => ex
-      @logger.error(ex.message)
-    end
+    @logger.info("[#{@target}] processing #{@path}")
 
+    @hash = event.get('sha256')
+
+    if @hash.nil?
+      begin
+        @hash = Digest::SHA2.new(256).hexdigest File.read @path
+        event.set('sha256', @hash)
+      rescue Errno::ENOENT => ex
+        @logger.error(ex.message)
+      end
+    end
 
     starting_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     metascan_result,score = get_response_from_hash
@@ -227,13 +213,6 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
     event.set(@target, metascan_result)
     event.set(@score_name, score)
 
-    AerospikeManager::update_malware_hash_score(@aerospike, @aerospike_namespace, @aerospike_set, @hash, @score_name, score, "fb")
-
-    if !@access_key_id.empty? and !@secret_access_key.empty?
-      S3Manager::update_results_file_s3(metascan_result, File.basename(@path), @timestamp,
-                                        @target, @s3_path, @bucket, @endpoint, @access_key_id,
-                                        @secret_access_key, @force_path_style, @ssl_verify_peer, @ssl_ca_bundle, @logger)
-    end
     # filter_matched should go in the last line of our successful code
     filter_matched(event)
 
