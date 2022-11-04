@@ -12,6 +12,8 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
 
   # Metascan apikey. Please visit https://metadefender.opswat.com/account to get your apikey.
   config :apikey,                           :validate => :string,           :required => true
+  # Should upload the file if the hash could not be found in MetaDefender DB?
+  config :upload_file,                      :validate => :boolean, :default => false
   # File that is going to be analyzed
   config :file_field,                       :validate => :string,           :default => "[path]"
   # Timeout waiting for response
@@ -202,8 +204,13 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
 
     # The hash was not found. Error code 404003
     if metascan_result.empty?
-      data_id = send_file
-      metascan_result,score = get_response_from_data_id(data_id)
+      if @upload_file
+        data_id = send_file
+        metascan_result,score = get_response_from_data_id(data_id)
+      else
+        @logger.info("File is not going to be sent to be analyzed because of selected options.")
+        score = 0
+      end
     end
 
     ending_time  = Process.clock_gettime(Process::CLOCK_MONOTONIC)
