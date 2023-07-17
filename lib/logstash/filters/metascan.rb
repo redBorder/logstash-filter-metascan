@@ -91,7 +91,9 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
       unless result["error"]
         total_avs = result["scan_results"]["total_avs"].to_f
         total_detected_avs = result["scan_results"]["total_detected_avs"].to_f
-        score = ( total_detected_avs / total_avs * 100 ).round
+        if !total_avs.nan? && !total_detected_avs.nan?
+          score = ( total_detected_avs / total_avs * 100 ).round
+        end
       end
 
     rescue Faraday::TimeoutError
