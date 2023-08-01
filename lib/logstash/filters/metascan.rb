@@ -91,8 +91,10 @@ class LogStash::Filters::Metascan < LogStash::Filters::Base
       unless result["error"]
         total_avs = result["scan_results"]["total_avs"].to_f
         total_detected_avs = result["scan_results"]["total_detected_avs"].to_f
-        if !total_avs.nan? && !total_detected_avs.nan?
+        begin
           score = ( total_detected_avs / total_avs * 100 ).round
+        rescue => e
+          @logger.error("Error while calculating score for metascan hash")
         end
       end
 
